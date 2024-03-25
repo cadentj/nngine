@@ -1,8 +1,8 @@
-from nnsight.envoy import Envoy as NNsightEnvoy
-
 from typing import Callable
 
 import torch
+
+from nnsight.envoy import Envoy as NNsightEnvoy
 
 class Envoy(NNsightEnvoy) :
 
@@ -11,7 +11,6 @@ class Envoy(NNsightEnvoy) :
         self._attr_map = attr_map
 
         super(Envoy, self).__init__(module, module_path)
-
 
     def _add_envoy(self, module: torch.nn.Module, name: str):
 
@@ -69,19 +68,17 @@ class FnEnvoy(Envoy):
     
     def __init__(
             self, 
-            envoy: Envoy, 
+            base: Envoy, 
             target: Envoy, 
             fn: Callable, 
             inverse: Callable, 
-            replace=False
         ):
-        super().__init__(envoy._module)
+        super().__init__(base._module)
 
-        self._envoy = envoy
+        self._envoy = base
         self._target = target
         self._fn = fn
         self._inverse = inverse
-        self._replace = replace
 
     def __repr__(self):
         
@@ -90,13 +87,10 @@ class FnEnvoy(Envoy):
     @property
     def output(self):
 
-        if self._replace:
-            out = self._fn(self._envoy.output)
+        out = self._fn(self._envoy.output)
 
-            revert = self._inverse(out)
+        revert = self._inverse(out)
 
-            self._target.input = revert
+        self._target.input = revert
 
-            return out
-        else:
-            return self._fn(self._envoy.output)
+        return revert

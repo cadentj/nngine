@@ -1,1 +1,1 @@
-from .alterations import get_attr_map, Alteration
+from .alterations import alter

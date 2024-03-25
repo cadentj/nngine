@@ -6,3 +6,5 @@ def fetch_sub_envoy(envoy, target):
         result = fetch_sub_envoy(sub, target)  
         if result is not None:
             return result
+
+# def stagger()
