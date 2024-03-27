@@ -10,7 +10,7 @@ from jaxtyping import Float, Int
 from typing import Dict, Callable, List, Union
 import numpy as np
 
-from nnsight.models.UnifiedTransformer import UnifiedTransformer
+from nnsight import LanguageModel
 from transformer_lens import HookedTransformerConfig
 
 class EAP:
@@ -102,7 +102,7 @@ class EAP:
 
     def run(
         self,
-        model: UnifiedTransformer,
+        model: LanguageModel,
         clean_tokens: Int[Tensor, "batch_size seq_len"],
         corrupted_tokens: Int[Tensor, "batch_size seq_len"],
         # TODO: Implement batch_size
@@ -130,6 +130,7 @@ class EAP:
                     if "hook_mlp_out" in self.upstream_hook_slices:
                         corrupted_out[f"blocks.{i}.hook_mlp_out"] = layer.hook_mlp_out.output.save()
 
+        print(corrupted_out[f"blocks.0.attn.hook_result"].shape)
         for component, activations in corrupted_out.items():
             if "mlp" in component:
                 activations = activations.value.unsqueeze(-2)

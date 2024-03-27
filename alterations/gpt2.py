@@ -21,7 +21,7 @@ def qkv_hook(envoy):
     hook = FnEnvoy(
         envoy,
         split,
-        revert,
+        inverse=revert,
     )
 
     return hook
@@ -43,7 +43,7 @@ def head_hook(envoy):
     hook = FnEnvoy(
         envoy,
         split,
-        revert,
+        inverse=revert,
         io = "input"
     )
 
@@ -59,9 +59,32 @@ head_alterations = [
     for layer_idx in range(12)
 ]
 
+def attn_result_hook(envoy):
+    split = lambda x: einops.rearrange(x[0][0], "batch seq (n_heads head_dim) -> batch seq n_heads head_dim", n_heads=12, head_dim=64)
+
+    hook = FnEnvoy(
+        envoy,
+        split,
+        io = "input",
+        replace=False
+    )
+
+    return hook
+
+attn_alterations = [
+    (
+        f".transformer.h.{layer_idx}.attn", 
+        f".transformer.h.{layer_idx}.attn.c_proj",  
+        "attn_result",
+        attn_result_hook,
+    )
+    for layer_idx in range(12)
+]
+
 fn_alterations = [
     *qkv_alterations,
-    *head_alterations
+    *head_alterations,
+    *attn_alterations
 ]
 
 def gpt2():

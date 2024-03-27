@@ -10,10 +10,14 @@ class FnEnvoy(Envoy):
             self, 
             envoy: Envoy, 
             fn: Callable, 
-            inverse: Callable, 
-            io: str = "output"
+            inverse: Callable = None, 
+            io: str = "output",
+            replace: bool = True
         ):
         super().__init__(envoy._module)
+
+        if not inverse and replace: 
+            raise ValueError("Inverse function required for replaceable FnEnvoy")
 
         self._envoy = envoy
 
@@ -22,6 +26,7 @@ class FnEnvoy(Envoy):
         self._inverse = inverse
 
         self._io = io
+        self._replace = replace
         self._output = None
 
     def __repr__(self):
@@ -41,6 +46,9 @@ class FnEnvoy(Envoy):
 
     @output.setter
     def output(self, value: Union[InterventionProxy, Any]) -> None:
+        if not self._replace:
+            raise ValueError("Cannot replace a wrapper output")
+
         value = self._inverse(value)
 
         self._tracer._graph.add(
