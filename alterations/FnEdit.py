@@ -10,29 +10,27 @@ class FnEdit(Edit):
         self, 
         name: str,
         parent: str,
-        base: str, 
-        target: str, 
+        base: str,
         fn_hook: Callable,
     ) -> None:
         super().__init__()
 
         self._name = name
         self._parent = parent
-        self._base = base
-        self._target = target 
+        self._base = base 
         self._fn_hook = fn_hook
         
     def edit(self, obj: Envoy):
 
-        fn_envoy = self._fn_hook(
-            fetch_sub_envoy(obj, self._base),
-            fetch_sub_envoy(obj, self._target)
-        )
+        parent = fetch_sub_envoy(obj, self._parent)
+        base = fetch_sub_envoy(parent, self._base)
+
+        edit = self._fn_hook(base)
 
         setattr(
-            fetch_sub_envoy(obj, self._parent),
+            parent,
             self._name,
-            fn_envoy
+            edit
         )
 
     def restore(self, obj: Envoy):

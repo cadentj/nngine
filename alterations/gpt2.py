@@ -1,16 +1,5 @@
-from __future__ import annotations
-
-from typing import Optional, Tuple, Union
-
-import torch
-from transformers.models import gpt2
-
-from nnsight import util
-from nnsight.patching import Patch, Patcher
-
 import einops
-from ..envoy import FnEnvoy
-
+from ..FnEnvoy import FnEnvoy
 
 ### ATTRIBUTE MAP ###
 
@@ -25,33 +14,54 @@ name_alterations = {
 
 ### ALTERATIONS ###
 
-def head_hook(base, target):
-    rearrange = lambda x : einops.rearrange(x, "batch seq (heads head_dim) -> batch heads seq head_dim", heads=12)
-    revert = lambda x : einops.rearrange(x, "batch heads seq head_dim -> batch seq (heads head_dim)")
+def qkv_hook(envoy):
+    split = lambda x: einops.rearrange(x, "batch seq (d qkv) -> qkv batch seq d", qkv=3, d=768)
+    revert = lambda x: einops.rearrange(x, "qkv batch seq d -> batch seq (d qkv)", qkv=3, d=768)
 
-    fn_hook = FnEnvoy(base, target, rearrange, revert)
+    hook = FnEnvoy(
+        envoy,
+        split,
+        revert,
+    )
 
-    return fn_hook
+    return hook
+
+qkv_alterations = [
+    (
+        f".transformer.h.{layer_idx}.attn", 
+        f".transformer.h.{layer_idx}.attn.c_attn",  
+        "qkv",
+        qkv_hook
+    )
+    for layer_idx in range(12)
+]
+
+def head_hook(envoy):
+    split = lambda x: einops.rearrange(x[0][0], "batch seq (n_heads head_dim) -> batch seq n_heads head_dim", n_heads=12, head_dim=64)
+    revert = lambda x: einops.rearrange(x, "batch seq n_heads head_dim -> batch seq (n_heads head_dim)", n_heads=12, head_dim=64)
+
+    hook = FnEnvoy(
+        envoy,
+        split,
+        revert,
+        io = "input"
+    )
+
+    return hook
+
+head_alterations = [
+    (
+        f".transformer.h.{layer_idx}.attn", 
+        f".transformer.h.{layer_idx}.attn.c_proj",  
+        "heads",
+        head_hook,
+    )
+    for layer_idx in range(12)
+]
 
 fn_alterations = [
-    (
-        f".transformer.h.{base}.attn", 
-        f".transformer.h.{base}.attn.c_proj", 
-        f".transformer.h.{target}.attn.c_proj", 
-        "heads",
-        head_hook
-    )
-    for base, target in [
-        (i, i + 1) for i in range(11)
-    ]
-] + [
-    (
-        f".transformer.h.11.attn", 
-        f".transformer.h.11.attn.c_proj", 
-        f".transformer.ln_f", 
-        "heads",
-        head_hook
-    )
+    *qkv_alterations,
+    *head_alterations
 ]
 
 def gpt2():

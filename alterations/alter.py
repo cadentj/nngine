@@ -22,17 +22,17 @@ def alter(model):
             name, 
             parent, 
             base, 
-            target, 
             fn_hook
         )
-        for parent, base, target, name, fn_hook in fn_alterations
+        for parent, base, name, fn_hook in fn_alterations
     ]
 
     editor = Editor(model._envoy, fn_edits)
-    model.editor = editor
-    model.editor.__enter__()
+
+    model._editor = editor
+    model._editor.__enter__()
 
 def restore(model):
-    model.editor.__exit__(None, None, None)
+    model._editor.__exit__(None, None, None)
 
     model._envoy = NNsightEnvoy(model)

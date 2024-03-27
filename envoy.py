@@ -1,5 +1,3 @@
-from typing import Callable
-
 import torch
 
 from nnsight.envoy import Envoy as NNsightEnvoy
@@ -62,35 +60,3 @@ class Envoy(NNsightEnvoy) :
                 main_str += "\n  " + "\n  ".join(lines) + "\n"
         main_str += ")"
         return main_str
-
-
-class FnEnvoy(Envoy):
-    
-    def __init__(
-            self, 
-            base: Envoy, 
-            target: Envoy, 
-            fn: Callable, 
-            inverse: Callable, 
-        ):
-        super().__init__(base._module)
-
-        self._envoy = base
-        self._target = target
-        self._fn = fn
-        self._inverse = inverse
-
-    def __repr__(self):
-        
-        return "Placeholder"
-
-    @property
-    def output(self):
-
-        out = self._fn(self._envoy.output)
-
-        revert = self._inverse(out)
-
-        self._target.input = revert
-
-        return revert
