@@ -15,7 +15,7 @@ name_alterations = {
 ### ALTERATIONS ###
 
 def qkv_hook(envoy):
-    split = lambda x: einops.rearrange(x, "batch seq (d qkv) -> qkv batch seq d", qkv=3, d=768)
+    split = lambda x: einops.rearrange(x.output, "batch seq (d qkv) -> qkv batch seq d", qkv=3, d=768)
     revert = lambda x: einops.rearrange(x, "qkv batch seq d -> batch seq (d qkv)", qkv=3, d=768)
 
     hook = FnEnvoy(
@@ -37,14 +37,13 @@ qkv_alterations = [
 ]
 
 def head_hook(envoy):
-    split = lambda x: einops.rearrange(x[0][0], "batch seq (n_heads head_dim) -> batch seq n_heads head_dim", n_heads=12, head_dim=64)
+    split = lambda x: einops.rearrange(x.input[0][0], "batch seq (n_heads head_dim) -> batch seq n_heads head_dim", n_heads=12, head_dim=64)
     revert = lambda x: einops.rearrange(x, "batch seq n_heads head_dim -> batch seq (n_heads head_dim)", n_heads=12, head_dim=64)
 
     hook = FnEnvoy(
         envoy,
         split,
         inverse=revert,
-        io = "input"
     )
 
     return hook
@@ -59,14 +58,42 @@ head_alterations = [
     for layer_idx in range(12)
 ]
 
+
 def attn_result_hook(envoy):
-    split = lambda x: einops.rearrange(x[0][0], "batch seq (n_heads head_dim) -> batch seq n_heads head_dim", n_heads=12, head_dim=64)
+
+    def attn_result(x):
+
+        attn_heads_out = einops.rearrange(
+            x.c_proj.input[0][0],
+            "batch pos (head_idx head_dim) \
+                -> batch pos head_idx head_dim",
+            head_idx=12,
+            head_dim=64
+        )
+
+        w_o_split = einops.rearrange(
+            x.c_proj.weight,
+            "(head_idx head_dim) d_model \
+                -> head_idx head_dim d_model",
+            head_idx=12,
+            head_dim=64
+        )
+
+        attn_out = einops.einsum(
+            attn_heads_out, w_o_split,
+            "batch pos head_idx head_dim, head_idx head_dim d_model -> batch pos head_idx d_model",
+        )
+
+        return attn_out
+
+    def revert(x):
+        import torch
+        torch.sum(x, dim=2)
 
     hook = FnEnvoy(
         envoy,
-        split,
-        io = "input",
-        replace=False
+        attn_result,
+        inverse=revert
     )
 
     return hook
@@ -74,7 +101,7 @@ def attn_result_hook(envoy):
 attn_alterations = [
     (
         f".transformer.h.{layer_idx}.attn", 
-        f".transformer.h.{layer_idx}.attn.c_proj",  
+        f".transformer.h.{layer_idx}.attn",  
         "attn_result",
         attn_result_hook,
     )

@@ -11,7 +11,6 @@ class FnEnvoy(Envoy):
             envoy: Envoy, 
             fn: Callable, 
             inverse: Callable = None, 
-            io: str = "output",
             replace: bool = True
         ):
         super().__init__(envoy._module)
@@ -25,7 +24,6 @@ class FnEnvoy(Envoy):
         self._fn = fn
         self._inverse = inverse
 
-        self._io = io
         self._replace = replace
         self._output = None
 
@@ -37,10 +35,7 @@ class FnEnvoy(Envoy):
     def output(self):
         if self._output is None:
 
-            if self._io == "output":
-                self._output = self._fn(self._envoy.output)
-            else:
-                self._output = self._fn(self._envoy.input)
+            self._output = self._fn(self._envoy)
 
         return self._output
 
