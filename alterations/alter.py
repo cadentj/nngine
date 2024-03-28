@@ -20,11 +20,10 @@ def alter(model):
     fn_edits = [
         FnEdit(
             name, 
-            parent, 
-            base, 
+            base,
             fn_hook
         )
-        for parent, base, name, fn_hook in fn_alterations
+        for base, name, fn_hook in fn_alterations
     ]
 
     editor = Editor(model._envoy, fn_edits)

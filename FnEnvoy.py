@@ -8,23 +8,22 @@ class FnEnvoy(Envoy):
     
     def __init__(
             self, 
-            envoy: Envoy, 
+            base: Envoy, 
             fn: Callable, 
             inverse: Callable = None, 
             replace: bool = True
         ):
-        super().__init__(envoy._module)
+        super().__init__(base._module)
 
-        if not inverse and replace: 
-            raise ValueError("Inverse function required for replaceable FnEnvoy")
+        self._base = base
 
-        self._envoy = envoy
+        # I don't remember what this is for
+        self._base._sub_envoys.append(self)
 
-        self._envoy._sub_envoys.append(self)
         self._fn = fn
         self._inverse = inverse
-
         self._replace = replace
+
         self._output = None
 
     def __repr__(self):
@@ -35,19 +34,24 @@ class FnEnvoy(Envoy):
     def output(self):
         if self._output is None:
 
-            self._output = self._fn(self._envoy)
+            self._output = self._fn(self._base)
+
+        if self._replace:
+            self._base.output = self._inverse(self._output)
 
         return self._output
 
     @output.setter
     def output(self, value: Union[InterventionProxy, Any]) -> None:
-        if not self._replace:
-            raise ValueError("Cannot replace a wrapper output")
-
         value = self._inverse(value)
 
         self._tracer._graph.add(
             target="swap", args=[self.output.node, value], value=True
         )
+
+        if self._replace:
+            self._tracer._graph.add(
+                target="swap", args=[self._base.output.node, value], value=True
+            )
 
         self._output = None
