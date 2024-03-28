@@ -14,9 +14,14 @@ name_alterations = {
 
 ### ALTERATIONS ###
 
-def qkv_hook(envoy):
-    split = lambda x: einops.rearrange(x.output, "batch seq (d qkv) -> qkv batch seq d", qkv=3, d=768)
-    revert = lambda x: einops.rearrange(x, "qkv batch seq d -> batch seq (d qkv)", qkv=3, d=768)
+def qkv_hook(envoy, head_type = 0):
+    # where qkv is 0, 1, 2
+    split = lambda x: einops.rearrange(x.output, "batch seq (d qkv) -> qkv batch seq d", qkv=3, d=768)[head_type,...]
+
+    def revert(x):
+        split = einops.rearrange(envoy.output, "batch seq (d qkv) -> qkv batch seq d", qkv=3, d=768)
+        split[head_type,...] = x
+        return einops.rearrange(split, "qkv batch seq d -> batch seq (d qkv)", qkv=3, d=768)
 
     hook = FnEnvoy(
         envoy,
@@ -26,15 +31,35 @@ def qkv_hook(envoy):
 
     return hook
 
-qkv_alterations = [
+q_alter = [
     (
         f".transformer.h.{layer_idx}.attn", 
         f".transformer.h.{layer_idx}.attn.c_attn",  
-        "qkv",
-        qkv_hook
+        "q",
+        lambda x: qkv_hook(x, 0),
     )
     for layer_idx in range(12)
 ]
+
+k_alter = [
+    (
+        f".transformer.h.{layer_idx}.attn", 
+        f".transformer.h.{layer_idx}.attn.c_attn",  
+        "k",
+        lambda x: qkv_hook(x, 1),
+    )
+    for layer_idx in range(12)
+] 
+
+v_alter = [
+    (
+        f".transformer.h.{layer_idx}.attn", 
+        f".transformer.h.{layer_idx}.attn.c_attn",  
+        "v",
+        lambda x: qkv_hook(x, 2),
+    )
+    for layer_idx in range(12)
+] 
 
 def head_hook(envoy):
     split = lambda x: einops.rearrange(x.input[0][0], "batch seq (n_heads head_dim) -> batch seq n_heads head_dim", n_heads=12, head_dim=64)
@@ -109,7 +134,9 @@ attn_alterations = [
 ]
 
 fn_alterations = [
-    *qkv_alterations,
+    *q_alter,
+    *k_alter,
+    *v_alter,
     *head_alterations,
     *attn_alterations
 ]
