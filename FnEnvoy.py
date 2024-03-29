@@ -11,6 +11,7 @@ class FnEnvoy(Envoy):
             base: Envoy, 
             fn: Callable, 
             inverse: Callable = None, 
+            io: str = "output",
             replace: bool = True
         ):
         super().__init__(base._module)
@@ -23,6 +24,7 @@ class FnEnvoy(Envoy):
         self._fn = fn
         self._inverse = inverse
         self._replace = replace
+        self._io = io
 
         self._output = None
 
@@ -37,7 +39,11 @@ class FnEnvoy(Envoy):
             self._output = self._fn(self._base)
 
         if self._replace:
-            self._base.output = self._inverse(self._output)
+            if self._io == "output":
+                self._base.output = self._inverse(self._output)
+            
+            elif self._io == "input":
+                self._base.input = self._inverse(self._output)
 
         return self._output
 
@@ -50,8 +56,11 @@ class FnEnvoy(Envoy):
         )
 
         if self._replace:
-            self._tracer._graph.add(
-                target="swap", args=[self._base.output.node, value], value=True
-            )
+
+            if self._io == "output":
+                self._base.output = value
+            
+            elif self._io == "input":
+                self._base.input = value
 
         self._output = None

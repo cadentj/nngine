@@ -13,9 +13,9 @@ model_alterations = {
 def alter(model):
 
     model_name = model._model.__class__.__name__
-    name_alterations, fn_alterations = model_alterations[model_name]()
+    name_alterations, fn_alterations, hidden = model_alterations[model_name]()
 
-    model._envoy = Envoy(model._model, attr_map=name_alterations)
+    model._envoy = Envoy(model._model, attr_map=name_alterations, hidden=hidden)
 
     fn_edits = [
         FnEdit(

@@ -4,15 +4,16 @@ from nnsight.envoy import Envoy as NNsightEnvoy
 
 class Envoy(NNsightEnvoy) :
 
-    def __init__(self, module: torch.nn.Module, module_path: str = "", attr_map: dict = {}):
+    def __init__(self, module: torch.nn.Module, module_path: str = "", attr_map: dict = {}, hidden = []):
 
         self._attr_map = attr_map
+        self._hidden = hidden
 
         super(Envoy, self).__init__(module, module_path)
 
     def _add_envoy(self, module: torch.nn.Module, name: str):
 
-        envoy = Envoy(module, module_path=f"{self._module_path}.{name}", attr_map=self._attr_map)
+        envoy = Envoy(module, module_path=f"{self._module_path}.{name}", attr_map=self._attr_map, hidden=self._hidden)
 
         self._sub_envoys.append(envoy)
 
@@ -45,7 +46,7 @@ class Envoy(NNsightEnvoy) :
         child_lines = []
         for attribute_name, attribute in self.__dict__.items():
             attribute_name = self._attr_map.get(attribute_name, attribute_name)
-            if isinstance(attribute, Envoy):
+            if isinstance(attribute, Envoy) and attribute_name not in self._hidden:
                 mod_str = repr(attribute)
                 mod_str = torch.nn.modules.module._addindent(mod_str, 2)
                 child_lines.append("(" + attribute_name + "): " + mod_str)
