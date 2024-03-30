@@ -31,15 +31,15 @@ def qkv_hook(attn):
             qkv=3,
             d=768
         )
-
-    revert = lambda x: \
-        einops.rearrange(
+    
+    def revert(base, x):
+        base.output = einops.rearrange(
             x,
             "qkv batch seq d -> batch seq (d qkv)",
             qkv=3,
             d=768
         )
-    
+
     hook = FnEnvoy(
         attn.c_attn,
         split,
@@ -51,6 +51,7 @@ def qkv_hook(attn):
 qkv_alteration = [
     (
         f".transformer.h.{layer_idx}.attn",  
+        f".transformer.h.{layer_idx}.attn",  
         "qkv",
         qkv_hook,
     )
@@ -60,9 +61,9 @@ qkv_alteration = [
 def indv_qkv_hook(attn, slice_index):
     
     # q : 0, k : 1, v : 2
-    split = lambda _: attn.qkv.output[slice_index]
+    split = lambda qkv: qkv.output[slice_index]
 
-    def revert(x):
+    def revert(base, x):
         split = einops.rearrange(
             attn.output, 
             "batch seq (d qkv) -> qkv batch seq d", 
@@ -72,7 +73,7 @@ def indv_qkv_hook(attn, slice_index):
 
         split[slice_index] = x
         
-        return einops.rearrange(
+        base.output = einops.rearrange(
             split, 
             "qkv batch seq d -> batch seq (d qkv)", 
             qkv=3, 
@@ -80,7 +81,7 @@ def indv_qkv_hook(attn, slice_index):
         )
 
     hook = FnEnvoy(
-        attn.c_attn,
+        attn.qkv,
         split,
         inverse=revert,
     )
@@ -89,6 +90,7 @@ def indv_qkv_hook(attn, slice_index):
 
 q_alter = [
     (
+        f".transformer.h.{layer_idx}.attn",  
         f".transformer.h.{layer_idx}.attn",  
         "q",
         lambda x: indv_qkv_hook(x, 0),
@@ -99,6 +101,7 @@ q_alter = [
 k_alter = [
     (
         f".transformer.h.{layer_idx}.attn", 
+        f".transformer.h.{layer_idx}.attn", 
         "k",
         lambda x: indv_qkv_hook(x, 1),
     )
@@ -108,16 +111,17 @@ k_alter = [
 v_alter = [
     (
         f".transformer.h.{layer_idx}.attn",
+        f".transformer.h.{layer_idx}.attn", 
         "v",
         lambda x: indv_qkv_hook(x, 2),
     )
     for layer_idx in range(12)
 ] 
 
-def split_attn_input(attention):
+def split_attn_input(block):
 
     def add_head_dim(attn):
-        resid_pre = attn.input[0][0]
+        resid_pre = block.input[0][0]
 
         # `einops.repeat` uses a view in torch, so we generally clone the tensor to avoid using shared storage for each head entry
         return einops.repeat(
@@ -126,20 +130,20 @@ def split_attn_input(attention):
             head_idx=12,
         ).clone()
 
-    def revert(x):
-        torch.sum(x, dim=2)
+    def revert(base, x):
+        base.input[0][0][:] = torch.sum(x, dim=2)
 
     hook = FnEnvoy(
-        attention,
+        block.attn,
         add_head_dim,
         inverse=revert,
-        io = "input"
     )
 
     return hook
 
 attn_in_alterations = [
     (
+        f".transformer.h.{layer_idx}",
         f".transformer.h.{layer_idx}.attn",
         "attn_input",
         split_attn_input,
@@ -176,7 +180,7 @@ def split_qkv_hook(attn, slice_index):
         return split_out
 
     def revert(x):
-        torch.sum(x, dim=2)
+        return torch.sum(x, dim=2)
 
     hook = FnEnvoy(
         attn.attn_input,
@@ -189,6 +193,7 @@ def split_qkv_hook(attn, slice_index):
 q_split_alterations = [
     (
         f".transformer.h.{layer_idx}.attn",
+        f".transformer.h.{layer_idx}.attn",
         "split_q",
         lambda x: split_qkv_hook(x, 0),
     )
@@ -198,6 +203,7 @@ q_split_alterations = [
 k_split_alterations = [
     (
         f".transformer.h.{layer_idx}.attn",
+        f".transformer.h.{layer_idx}.attn",
         "split_k",
         lambda x: split_qkv_hook(x, 1),
     )
@@ -206,6 +212,7 @@ k_split_alterations = [
 
 v_split_alterations = [
     (
+        f".transformer.h.{layer_idx}.attn",
         f".transformer.h.{layer_idx}.attn",
         "split_v",
         lambda x: split_qkv_hook(x, 2),
@@ -227,6 +234,7 @@ def head_hook(base):
 
 head_alterations = [
     (
+        f".transformer.h.{layer_idx}.attn", 
         f".transformer.h.{layer_idx}.attn", 
         "heads",
         head_hook,
@@ -270,6 +278,7 @@ def attn_result_hook(attention):
 attn_alterations = [
     (
         f".transformer.h.{layer_idx}.attn",  
+        f".transformer.h.{layer_idx}.attn",  
         "attn_result",
         attn_result_hook,
     )
@@ -277,16 +286,16 @@ attn_alterations = [
 ]
 
 fn_alterations = [
+    *qkv_alteration,
     *q_alter,
     *k_alter,
     *v_alter,
-    *head_alterations,
-    *attn_alterations,
+    # *head_alterations,
+    # *attn_alterations,
     *attn_in_alterations,
-    *qkv_alteration,
-    *q_split_alterations,
-    *k_split_alterations,
-    *v_split_alterations,
+    # *q_split_alterations,
+    # *k_split_alterations,
+    # *v_split_alterations,
 ]
 
 def gpt2():

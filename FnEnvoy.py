@@ -11,7 +11,6 @@ class FnEnvoy(Envoy):
             base: Envoy, 
             fn: Callable, 
             inverse: Callable = None, 
-            io: str = "output",
             replace: bool = True
         ):
         super().__init__(base._module)
@@ -24,7 +23,6 @@ class FnEnvoy(Envoy):
         self._fn = fn
         self._inverse = inverse
         self._replace = replace
-        self._io = io
 
         self._output = None
         self._input = None
@@ -47,24 +45,13 @@ class FnEnvoy(Envoy):
             self._output = self._fn(self._base)
 
         if self._replace:
-            if self._io == "output":
-                self._base.output = self._inverse(self._output)
-            
-            elif self._io == "input":
-                self._base.input = self._inverse(self._output)
+            self._inverse(self._base, self._output)
 
         return self._output
 
     @output.setter
     def output(self, value: Union[InterventionProxy, Any]) -> None:
-        value = self._inverse(value)
-
         if self._replace:
-
-            if self._io == "output":
-                self._base.output = value
-            
-            elif self._io == "input":
-                self._base.input = value
+            self._inverse(self._base, value)
 
         self._output = None

@@ -1,5 +1,7 @@
 from ..envoy import Envoy
 
+from dataclasses import dataclass
+
 from nnsight.envoy import Envoy as NNsightEnvoy
 from .FnEdit import FnEdit
 from .Editor import Editor
@@ -9,6 +11,24 @@ from .gpt2 import gpt2
 model_alterations = {
     "GPT2LMHeadModel" : gpt2
 }
+
+@dataclass
+class Altr:
+    """Altr is a dataclass that holds the necessary information to alter a model.
+
+    Args:
+        base (str): The base is where the alteration takes place. All default interventions
+            can reference modules relative to the base.
+        target (str): The target of the alteration. The function envoy is appended as an 
+            attribute of the target.
+        name (str): The name of the alteration, referenced in the .trace context.
+        fn_hook (callable): A hook that that creates a FnEnvoy which is added later.
+    """
+
+    base: str 
+    target: str
+    name: str
+    fn_hook: callable
 
 def alter(model):
 
@@ -21,9 +41,10 @@ def alter(model):
         FnEdit(
             name, 
             base,
+            target,
             fn_hook
         )
-        for base, name, fn_hook in fn_alterations
+        for base, target, name, fn_hook in fn_alterations
     ]
 
     editor = Editor(model._envoy, fn_edits)
