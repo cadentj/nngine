@@ -15,18 +15,17 @@ name_alterations = {
 }
 
 hidden = [
-    "c_attn",
-    "c_proj",
-    "qkv",
+    # "c_attn",
+    # "c_proj",
+    # "qkv",
 ]
 
 ### ALTERATIONS ###
 
 def qkv_hook(attn):
 
-    split = lambda x: \
-        einops.rearrange(
-            x.output,
+    split = lambda c_attn: einops.rearrange(
+            c_attn.output,
             "batch seq (d qkv) -> qkv batch seq d",
             qkv=3,
             d=768
@@ -64,21 +63,12 @@ def indv_qkv_hook(attn, slice_index):
     split = lambda qkv: qkv.output[slice_index]
 
     def revert(base, x):
-        split = einops.rearrange(
-            attn.output, 
-            "batch seq (d qkv) -> qkv batch seq d", 
-            qkv=3, 
-            d=768
-        )
-
+        split = base.output
         split[slice_index] = x
         
-        base.output = einops.rearrange(
-            split, 
-            "qkv batch seq d -> batch seq (d qkv)", 
-            qkv=3, 
-            d=768
-        )
+        # Note how we didn't have to rearrange here because the @setter
+        # on qkv already rearranges
+        base.output = split
 
     hook = FnEnvoy(
         attn.qkv,
