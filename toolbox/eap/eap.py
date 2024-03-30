@@ -167,6 +167,11 @@ class EAP:
             value = metric(logits)
             value.backward()
 
+        print(gradients[f"blocks.0.hook_q_input"])
+        print(gradients[f"blocks.0.hook_k_input"])
+
+        return
+
         print("Q K V shape: ", gradients[f"blocks.0.hook_q_input"].shape)
 
         for component, activations in clean_out.items():

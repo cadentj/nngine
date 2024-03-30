@@ -13,11 +13,13 @@ import numpy as np
 from nnsight import LanguageModel
 from transformer_lens import HookedTransformerConfig
 
+from nngine import alter
+
 class EAP:
 
     def __init__(
         self,
-        cfg: HookedTransformerConfig,
+        cfg: dict,
         components: List[str] = ["head", "mlp"],
     ):
 
@@ -123,20 +125,20 @@ class EAP:
         upstream_activations_difference = t.zeros(
             (batch_size, seq_len, self.n_upstream_nodes, self.d_model),
             device=self.device,
-            dtype=model.cfg.dtype,
+            # dtype=model.cfg.dtype,
+            dtype=t.float32,
             requires_grad=False
         )
         
         corrupted_out = {}
         with t.no_grad():
             with model.trace(corrupted_tokens):
-                for i, layer in enumerate(model.blocks):
-                    corrupted_out[f"blocks.{i}.attn.hook_result"] = layer.attn.hook_result.output.save()
+                for i, layer in enumerate(model.transformer.layers):
+                    corrupted_out[f"blocks.{i}.attn.hook_result"] = layer.attn.attn_result.output.save()
 
                     if "hook_mlp_out" in self.upstream_hook_slices:
-                        corrupted_out[f"blocks.{i}.hook_mlp_out"] = layer.hook_mlp_out.output.save()
+                        corrupted_out[f"blocks.{i}.hook_mlp_out"] = layer.mlp.output.save()
 
-        print(corrupted_out[f"blocks.0.attn.hook_result"].shape)
         for component, activations in corrupted_out.items():
             if "mlp" in component:
                 activations = activations.value.unsqueeze(-2)
@@ -150,28 +152,37 @@ class EAP:
 
         clean_out = {}
         gradients = {}
-        with model.trace(clean_tokens):
-            for i, layer in enumerate(model.blocks):
 
+        model = LanguageModel(
+            'openai-community/gpt2',
+            device_map="cuda:0",
+            dispatch=True,
+        )
+        alter(model)
+
+        with model.trace(clean_tokens):
+
+            for i, layer in enumerate(model.transformer.layers):
                 clean_out[f"blocks.{i}.attn.hook_result"] = layer.attn.attn_result.output.save()
 
-                clean_out[f"blocks.{i}.attn.hook_result"] = layer.attn.hook_result.output.save()
-                q, k, v = layer.hook_q_input.input[0][0].grad.save(), layer.hook_k_input.input[0][0].grad.save(), layer.hook_v_input.input[0][0].grad.save()
+                q, k, v = layer.attn.split_q.input.grad.save(), layer.attn.split_k.input.grad.save(), layer.attn.split_v.input.grad.save()
 
                 if "hook_mlp_out" in self.upstream_hook_types:
-                    clean_out[f"blocks.{i}.hook_mlp_out"] = layer.hook_mlp_out.output.save()
+                    clean_out[f"blocks.{i}.hook_mlp_out"] = layer.mlp.output.save()
 
-                    mlp_in = layer.hook_mlp_in.output.grad.save()
+                    mlp_in = layer.mlp.input[0][0].grad.save()
 
                     gradients[f"blocks.{i}.hook_mlp_in"] = mlp_in
 
-                gradients[f"blocks.{i}.hook_q_input"] = q
-                gradients[f"blocks.{i}.hook_k_input"] = k
-                gradients[f"blocks.{i}.hook_v_input"] = v
+                # gradients[f"blocks.{i}.hook_q_input"] = q
+                # gradients[f"blocks.{i}.hook_k_input"] = k
+                # gradients[f"blocks.{i}.hook_v_input"] = v
             
-            logits = model.unembed.output
+            logits = model.output.logits
             value = metric(logits)
             value.backward()
+
+        print(q)
 
         for component, activations in clean_out.items():
             if "mlp" in component:

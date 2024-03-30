@@ -24,7 +24,9 @@ hidden = [
 
 def qkv_hook(attn):
 
-    split = lambda c_attn: einops.rearrange(
+
+    def split(c_attn):
+        return einops.rearrange(
             c_attn.output,
             "batch seq (d qkv) -> qkv batch seq d",
             qkv=3,
@@ -163,14 +165,19 @@ def split_qkv_hook(attn, slice_index):
         )[slice_index]
         
         split_out = einops.einsum(
-            attn_input, split_weight,
+            attn_input.output, split_weight,
             "batch pos head_idx d_model, head_idx d_head d_model -> batch pos head_idx d_head",
         ) + split_bias
 
         return split_out
 
-    def revert(x):
-        return torch.sum(x, dim=2)
+    def revert(base, x):
+        attn.qkv.output[slice_index] = einops.rearrange(
+            x,
+            "batch pos head_idx d_head -> batch pos (head_idx d_head)",
+            head_idx=12,
+            d_head=64,
+        )
 
     hook = FnEnvoy(
         attn.attn_input,
@@ -211,8 +218,10 @@ v_split_alterations = [
 ]
 
 def head_hook(base):
-    split = lambda x: einops.rearrange(x.input[0][0], "batch seq (head_idx head_dim) -> batch seq head_idx head_dim", head_idx=12, head_dim=64)
-    revert = lambda x: einops.rearrange(x, "batch seq head_idx head_dim -> batch seq (head_idx head_dim)", head_idx=12, head_dim=64)
+    split = lambda c_proj: einops.rearrange(c_proj.input[0][0], "batch seq (head_idx head_dim) -> batch seq head_idx head_dim", head_idx=12, head_dim=64)
+
+    def revert(base, c_proj):
+        base.output = einops.rearrange(c_proj, "batch seq head_idx head_dim -> batch seq (head_idx head_dim)", head_idx=12, head_dim=64)
 
     hook = FnEnvoy(
         base.c_proj,
@@ -235,12 +244,16 @@ head_alterations = [
 
 def attn_result_hook(attention):
 
-    def attn_result(attn):
-
-        attn_heads_out = attn.heads.output
+    def attn_result(c_proj):
+        heads = einops.rearrange(
+            c_proj.input[0][0], 
+            "batch seq (head_idx head_dim) -> batch seq head_idx head_dim", 
+            head_idx=12, 
+            head_dim=64
+        )
 
         w_o_split = einops.rearrange(
-            attn.c_proj.weight,
+            c_proj.weight,
             "(head_idx head_dim) d_model \
                 -> head_idx head_dim d_model",
             head_idx=12,
@@ -248,17 +261,17 @@ def attn_result_hook(attention):
         )
 
         attn_out = einops.einsum(
-            attn_heads_out, w_o_split,
+            heads, w_o_split,
             "batch pos head_idx head_dim, head_idx head_dim d_model -> batch pos head_idx d_model",
         )
 
         return attn_out
 
-    def revert(x):
-        torch.sum(x, dim=2)
+    def revert(base, x):
+        base.output = torch.sum(x, dim=2)
 
     hook = FnEnvoy(
-        attention,
+        attention.c_proj,
         attn_result,
         inverse=revert
     )
@@ -280,12 +293,12 @@ fn_alterations = [
     *q_alter,
     *k_alter,
     *v_alter,
-    # *head_alterations,
-    # *attn_alterations,
+    *head_alterations,
+    *attn_alterations,
     *attn_in_alterations,
-    # *q_split_alterations,
-    # *k_split_alterations,
-    # *v_split_alterations,
+    *q_split_alterations,
+    *k_split_alterations,
+    *v_split_alterations,
 ]
 
 def gpt2():

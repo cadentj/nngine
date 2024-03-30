@@ -49,7 +49,12 @@ def alter(model):
 
     editor = Editor(model._envoy, fn_edits)
 
+    # TEMPORARY
+    if hasattr(model, "_editor"):
+        model._editor.__exit__(None, None, None)
+    
     model._editor = editor
+
     model._editor.__enter__()
 
 def restore(model):
