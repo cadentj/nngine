@@ -19,7 +19,7 @@ class FnEnvoy(Envoy):
         self._base = base
 
         # I don't remember what this is for
-        self._base._sub_envoys.append(self)
+        # self._base._sub_envoys.append(self)
 
         self._fn = fn
         self._inverse = inverse
@@ -27,10 +27,18 @@ class FnEnvoy(Envoy):
         self._io = io
 
         self._output = None
+        self._input = None
 
     def __repr__(self):
         
         return "Placeholder"
+
+    @property
+    def input(self):
+        if self._input is None:
+            self._input = self._base.output
+        
+        return self._input
 
     @property
     def output(self):
@@ -50,10 +58,6 @@ class FnEnvoy(Envoy):
     @output.setter
     def output(self, value: Union[InterventionProxy, Any]) -> None:
         value = self._inverse(value)
-
-        self._tracer._graph.add(
-            target="swap", args=[self.output.node, value], value=True
-        )
 
         if self._replace:
 

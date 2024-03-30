@@ -17,6 +17,7 @@ name_alterations = {
 hidden = [
     "c_attn",
     "c_proj",
+    "qkv",
 ]
 
 ### ALTERATIONS ###
@@ -149,17 +150,10 @@ attn_in_alterations = [
 
 def split_qkv_hook(attn, slice_index):
 
-    def split_head(c_attn):
-        resid_pre = attn.input[0][0]
-
-        repeated_tensor = einops.repeat(
-            resid_pre,
-            "batch pos d_model -> batch pos head_idx d_model",
-            head_idx=12,
-        )
+    def split_head(attn_input):
 
         split_weight = einops.rearrange(
-            c_attn.weight,
+            attn.c_attn.weight,
             "d_model (qkv head_idx d_head) -> qkv head_idx d_head d_model",
             qkv=3,
             head_idx=12,
@@ -167,7 +161,7 @@ def split_qkv_hook(attn, slice_index):
         )[slice_index]
 
         split_bias = einops.rearrange(
-            c_attn.bias,
+            attn.c_attn.bias,
             "(qkv head_idx d_head) -> qkv head_idx d_head",
             qkv=3,
             head_idx=12,
@@ -175,7 +169,7 @@ def split_qkv_hook(attn, slice_index):
         )[slice_index]
         
         split_out = einops.einsum(
-            repeated_tensor, split_weight,
+            attn_input, split_weight,
             "batch pos head_idx d_model, head_idx d_head d_model -> batch pos head_idx d_head",
         ) + split_bias
 
@@ -185,7 +179,7 @@ def split_qkv_hook(attn, slice_index):
         torch.sum(x, dim=2)
 
     hook = FnEnvoy(
-        attn.c_attn,
+        attn.attn_input,
         split_head,
         inverse=revert,
     )
@@ -288,11 +282,11 @@ fn_alterations = [
     *v_alter,
     *head_alterations,
     *attn_alterations,
+    *attn_in_alterations,
+    *qkv_alteration,
     *q_split_alterations,
     *k_split_alterations,
     *v_split_alterations,
-    *attn_in_alterations,
-    *qkv_alteration
 ]
 
 def gpt2():

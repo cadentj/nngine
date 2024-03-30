@@ -1,12 +1,15 @@
+from typing import Any, Union
+
 import torch
 
 from nnsight.envoy import Envoy as NNsightEnvoy
 
-class Envoy(NNsightEnvoy) :
+class Envoy(NNsightEnvoy):
 
     def __init__(self, module: torch.nn.Module, module_path: str = "", attr_map: dict = {}, hidden = []):
 
         self._attr_map = attr_map
+        self._remap = {v: k for k, v in attr_map.items()}
         self._hidden = hidden
 
         super(Envoy, self).__init__(module, module_path)

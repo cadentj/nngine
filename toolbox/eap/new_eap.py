@@ -21,10 +21,16 @@ class EAP:
         components: List[str] = ["head", "mlp"],
     ):
 
-        self.n_heads = cfg.n_heads
-        self.n_layers = cfg.n_layers
-        self.d_model = cfg.d_model
-        self.device = cfg.device
+        # self.n_heads = cfg.n_heads
+        # self.n_layers = cfg.n_layers
+        # self.d_model = cfg.d_model
+        # self.device = cfg.device
+
+        self.n_heads = 12
+        self.n_layers = 12
+        self.d_model = 768
+        self.device = "cuda"
+
         # q, k, and v up-projections
         self.num_projections = 3
 
@@ -146,6 +152,9 @@ class EAP:
         gradients = {}
         with model.trace(clean_tokens):
             for i, layer in enumerate(model.blocks):
+
+                clean_out[f"blocks.{i}.attn.hook_result"] = layer.attn.attn_result.output.save()
+
                 clean_out[f"blocks.{i}.attn.hook_result"] = layer.attn.hook_result.output.save()
                 q, k, v = layer.hook_q_input.input[0][0].grad.save(), layer.hook_k_input.input[0][0].grad.save(), layer.hook_v_input.input[0][0].grad.save()
 
