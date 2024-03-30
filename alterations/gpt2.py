@@ -144,20 +144,26 @@ attn_in_alterations = [
 ]
 
 
-def split_qkv_hook(attn, slice_index):
+def split_qkv_hook(block, slice_index):
 
     def split_head(attn_input):
 
+        attn_input = einops.repeat(
+            block.input[0][0],
+            "batch pos d_model -> batch pos head_idx d_model",
+            head_idx=12,
+        ).clone()
+
         split_weight = einops.rearrange(
-            attn.c_attn.weight,
-            "d_model (qkv head_idx d_head) -> qkv head_idx d_head d_model",
+            block.attn.c_attn.weight,
+            "(qkv head_idx d_head) d_model -> qkv head_idx d_head d_model",
             qkv=3,
             head_idx=12,
             d_head=64,
         )[slice_index]
 
         split_bias = einops.rearrange(
-            attn.c_attn.bias,
+            block.attn.c_attn.bias,
             "(qkv head_idx d_head) -> qkv head_idx d_head",
             qkv=3,
             head_idx=12,
@@ -172,7 +178,7 @@ def split_qkv_hook(attn, slice_index):
         return split_out
 
     def revert(base, x):
-        attn.qkv.output[slice_index] = einops.rearrange(
+        block.attn.qkv.output[slice_index] = einops.rearrange(
             x,
             "batch pos head_idx d_head -> batch pos (head_idx d_head)",
             head_idx=12,
@@ -180,7 +186,7 @@ def split_qkv_hook(attn, slice_index):
         )
 
     hook = FnEnvoy(
-        attn.attn_input,
+        block.attn.c_attn,
         split_head,
         inverse=revert,
     )
@@ -189,7 +195,7 @@ def split_qkv_hook(attn, slice_index):
 
 q_split_alterations = [
     (
-        f".transformer.h.{layer_idx}.attn",
+        f".transformer.h.{layer_idx}",
         f".transformer.h.{layer_idx}.attn",
         "split_q",
         lambda x: split_qkv_hook(x, 0),
@@ -199,7 +205,7 @@ q_split_alterations = [
 
 k_split_alterations = [
     (
-        f".transformer.h.{layer_idx}.attn",
+        f".transformer.h.{layer_idx}",
         f".transformer.h.{layer_idx}.attn",
         "split_k",
         lambda x: split_qkv_hook(x, 1),
@@ -209,7 +215,7 @@ k_split_alterations = [
 
 v_split_alterations = [
     (
-        f".transformer.h.{layer_idx}.attn",
+        f".transformer.h.{layer_idx}",
         f".transformer.h.{layer_idx}.attn",
         "split_v",
         lambda x: split_qkv_hook(x, 2),

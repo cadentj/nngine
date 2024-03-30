@@ -163,16 +163,16 @@ class EAP:
         with model.trace(clean_tokens):
 
             for i, layer in enumerate(model.transformer.layers):
-                clean_out[f"blocks.{i}.attn.hook_result"] = layer.attn.attn_result.output.save()
+                # clean_out[f"blocks.{i}.attn.hook_result"] = layer.attn.attn_result.output.save()
 
-                q, k, v = layer.attn.split_q.input.grad.save(), layer.attn.split_k.input.grad.save(), layer.attn.split_v.input.grad.save()
+                # q, k, v = layer.attn.split_q.input.grad.save(), layer.attn.split_k.input.grad.save(), layer.attn.split_v.input.grad.save()
+                gradients = layer.attn.split_q.output.grad.save()
+                # if "hook_mlp_out" in self.upstream_hook_types:
+                #     clean_out[f"blocks.{i}.hook_mlp_out"] = layer.mlp.output.save()
 
-                if "hook_mlp_out" in self.upstream_hook_types:
-                    clean_out[f"blocks.{i}.hook_mlp_out"] = layer.mlp.output.save()
+                #     mlp_in = layer.mlp.input[0][0].grad.save()
 
-                    mlp_in = layer.mlp.input[0][0].grad.save()
-
-                    gradients[f"blocks.{i}.hook_mlp_in"] = mlp_in
+                #     gradients[f"blocks.{i}.hook_mlp_in"] = mlp_in
 
                 # gradients[f"blocks.{i}.hook_q_input"] = q
                 # gradients[f"blocks.{i}.hook_k_input"] = k
@@ -182,8 +182,8 @@ class EAP:
             value = metric(logits)
             value.backward()
 
-        print(q)
-
+        print(gradients)
+        return
         for component, activations in clean_out.items():
             if "mlp" in component:
                 activations = activations.value.unsqueeze(-2)
