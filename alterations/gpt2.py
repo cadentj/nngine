@@ -24,22 +24,11 @@ hidden = [
 
 def qkv_hook(attn):
 
-
     def split(c_attn):
-        return einops.rearrange(
-            c_attn.output,
-            "batch seq (d qkv) -> qkv batch seq d",
-            qkv=3,
-            d=768
-        )
+        return c_attn.output.split(768, dim=2)
     
     def revert(base, x):
-        base.output = einops.rearrange(
-            x,
-            "qkv batch seq d -> batch seq (d qkv)",
-            qkv=3,
-            d=768
-        )
+        base.output = torch.cat(x, dim=2)
 
     hook = FnEnvoy(
         attn.c_attn,
@@ -61,15 +50,14 @@ qkv_alteration = [
 
 def indv_qkv_hook(attn, slice_index):
     
-    # q : 0, k : 1, v : 2
     split = lambda qkv: qkv.output[slice_index]
 
     def revert(base, x):
         split = base.output
         split[slice_index] = x
         
-        # Note how we didn't have to rearrange here because the @setter
-        # on qkv already rearranges
+        # NOTE: We don't .cat here because
+        # .qkv does so already
         base.output = split
 
     hook = FnEnvoy(
@@ -110,60 +98,74 @@ v_alter = [
     for layer_idx in range(12)
 ] 
 
-def split_attn_input(block):
+def attn_input_hook(attention):
+    def attn_input(attn):
+        attn_in = attn.input[0][0]
 
-    def add_head_dim(attn):
-        resid_pre = block.input[0][0]
-
-        # `einops.repeat` uses a view in torch, so we generally clone the tensor to avoid using shared storage for each head entry
         return einops.repeat(
-            resid_pre,
+            attn_in,
             "batch pos d_model -> batch pos head_idx d_model",
             head_idx=12,
         ).clone()
 
     def revert(base, x):
-        base.input[0][0][:] = torch.sum(x, dim=2)
+        base.input[0][0] = x.sum(dim=-2)
 
     hook = FnEnvoy(
-        block.attn,
-        add_head_dim,
+        attention,
+        attn_input,
         inverse=revert,
+        replace=False
     )
 
     return hook
 
-attn_in_alterations = [
+split_q_input = [
     (
-        f".transformer.h.{layer_idx}",
         f".transformer.h.{layer_idx}.attn",
-        "attn_input",
-        split_attn_input,
+        f".transformer.h.{layer_idx}.attn", 
+        "split_q_input",
+        lambda x: attn_input_hook(x),
     )
     for layer_idx in range(12)
-]
+] 
 
+split_k_input = [
+    (
+        f".transformer.h.{layer_idx}.attn",
+        f".transformer.h.{layer_idx}.attn", 
+        "split_k_input",
+        lambda x: attn_input_hook(x),
+    )
+    for layer_idx in range(12)
+] 
 
-def split_qkv_hook(block, slice_index):
+split_v_input = [
+    (
+        f".transformer.h.{layer_idx}.attn",
+        f".transformer.h.{layer_idx}.attn", 
+        "split_v_input",
+        lambda x: attn_input_hook(x),
+    )
+    for layer_idx in range(12)
+] 
+
+def split_qkv_hook(attention, slice_index):
+
+    slice_map = {0: attention.split_q_input, 1: attention.split_k_input, 2: attention.split_v_input}
+    repeated_attn = slice_map[slice_index]
 
     def split_head(attn_input):
 
-        attn_input = einops.repeat(
-            block.input[0][0],
-            "batch pos d_model -> batch pos head_idx d_model",
-            head_idx=12,
-        ).clone()
-
+        weight = torch.tensor_split(attention.c_attn.weight, 3, dim=1)[slice_index]
         split_weight = einops.rearrange(
-            block.attn.c_attn.weight,
-            "(qkv head_idx d_head) d_model -> qkv head_idx d_head d_model",
-            qkv=3,
-            head_idx=12,
-            d_head=64,
-        )[slice_index]
+            weight, 
+            "d_model (head_index d_head) -> head_index d_model d_head",
+            head_index=12
+        )
 
         split_bias = einops.rearrange(
-            block.attn.c_attn.bias,
+            attention.c_attn.bias,
             "(qkv head_idx d_head) -> qkv head_idx d_head",
             qkv=3,
             head_idx=12,
@@ -172,21 +174,23 @@ def split_qkv_hook(block, slice_index):
         
         split_out = einops.einsum(
             attn_input.output, split_weight,
-            "batch pos head_idx d_model, head_idx d_head d_model -> batch pos head_idx d_head",
+            "batch pos head_idx d_model, head_idx d_model d_head -> batch pos head_idx d_head",
         ) + split_bias
-
         return split_out
 
     def revert(base, x):
-        block.attn.qkv.output[slice_index] = einops.rearrange(
-            x,
-            "batch pos head_idx d_head -> batch pos (head_idx d_head)",
-            head_idx=12,
-            d_head=64,
-        )
+        split_attn = list(attention.qkv.output)
 
+        split_attn[slice_index] = einops.rearrange(
+            x, 
+            "batch pos head_idx d_head -> batch pos (head_idx d_head)",
+        )
+        attention.qkv.output = split_attn
+
+    # TODO: Remove replace keyword? 
+    # Maybe add some input function? 
     hook = FnEnvoy(
-        block.attn.c_attn,
+        repeated_attn,
         split_head,
         inverse=revert,
     )
@@ -195,7 +199,7 @@ def split_qkv_hook(block, slice_index):
 
 q_split_alterations = [
     (
-        f".transformer.h.{layer_idx}",
+        f".transformer.h.{layer_idx}.attn",
         f".transformer.h.{layer_idx}.attn",
         "split_q",
         lambda x: split_qkv_hook(x, 0),
@@ -205,7 +209,7 @@ q_split_alterations = [
 
 k_split_alterations = [
     (
-        f".transformer.h.{layer_idx}",
+        f".transformer.h.{layer_idx}.attn",
         f".transformer.h.{layer_idx}.attn",
         "split_k",
         lambda x: split_qkv_hook(x, 1),
@@ -215,7 +219,7 @@ k_split_alterations = [
 
 v_split_alterations = [
     (
-        f".transformer.h.{layer_idx}",
+        f".transformer.h.{layer_idx}.attn",
         f".transformer.h.{layer_idx}.attn",
         "split_v",
         lambda x: split_qkv_hook(x, 2),
@@ -299,9 +303,12 @@ fn_alterations = [
     *q_alter,
     *k_alter,
     *v_alter,
-    *head_alterations,
+    # *head_alterations,
     *attn_alterations,
-    *attn_in_alterations,
+    # *attn_in_alterations,
+    *split_q_input,
+    *split_k_input,
+    *split_v_input,
     *q_split_alterations,
     *k_split_alterations,
     *v_split_alterations,

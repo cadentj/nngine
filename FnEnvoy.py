@@ -10,7 +10,7 @@ class FnEnvoy(Envoy):
             self, 
             base: Envoy, 
             fn: Callable, 
-            inverse: Callable = None, 
+            inverse: Callable = None,
             replace: bool = True
         ):
         super().__init__(base._module)
@@ -33,6 +33,10 @@ class FnEnvoy(Envoy):
 
     @property
     def input(self):
+        
+        if self._replace:
+            self.output
+
         if self._input is None:
             self._input = self._base.output
         
