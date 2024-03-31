@@ -125,14 +125,11 @@ class EAP:
         with t.no_grad():
             with model.trace(corrupted_tokens):
                 for i, layer in enumerate(model.blocks):
-                    corrupted_out[f"blocks.{i}.attn.hook_result"] = layer.attn.hook_result.output.save()
+                    # corrupted_out[f"blocks.{i}.attn.hook_result"] = layer.attn.hook_result.output.save()
 
                     # TODO: Fix to just look for upstream slices.
                     if 'blocks.0.hook_mlp_out' in self.upstream_hook_slices:
                         corrupted_out[f"blocks.{i}.hook_mlp_out"] = layer.hook_mlp_out.output.save()
-
-        print("Corrupted out shape: ", corrupted_out[f"blocks.0.attn.hook_result"].shape)
-        print("MLP out shape: ", corrupted_out[f"blocks.0.hook_mlp_out"].shape)
 
         for component, activations in corrupted_out.items():
             if "mlp" in component:
@@ -144,6 +141,8 @@ class EAP:
 
         del corrupted_out
         t.cuda.empty_cache()
+        print(upstream_activations_difference)
+        return
 
         clean_out = {}
         gradients = {}
@@ -159,20 +158,13 @@ class EAP:
 
                     gradients[f"blocks.{i}.hook_mlp_in"] = mlp_in
 
-                gradients[f"blocks.{i}.hook_q_input"] = q
-                gradients[f"blocks.{i}.hook_k_input"] = k
-                gradients[f"blocks.{i}.hook_v_input"] = v
+                # gradients[f"blocks.{i}.hook_q_input"] = q
+                # gradients[f"blocks.{i}.hook_k_input"] = k
+                # gradients[f"blocks.{i}.hook_v_input"] = v
             
             logits = model.unembed.output
             value = metric(logits)
             value.backward()
-
-        print(gradients[f"blocks.0.hook_q_input"])
-        print(gradients[f"blocks.0.hook_k_input"])
-
-        return
-
-        print("Q K V shape: ", gradients[f"blocks.0.hook_q_input"].shape)
 
         for component, activations in clean_out.items():
             if "mlp" in component:

@@ -134,9 +134,9 @@ class EAP:
         with t.no_grad():
             with model.trace(corrupted_tokens):
                 for i, layer in enumerate(model.transformer.layers):
-                    corrupted_out[f"blocks.{i}.attn.hook_result"] = layer.attn.attn_result.output.save()
+                    # corrupted_out[f"blocks.{i}.attn.hook_result"] = layer.attn.attn_result.output.save()
 
-                    if "hook_mlp_out" in self.upstream_hook_slices:
+                    if "blocks.0.hook_mlp_out" in self.upstream_hook_slices:
                         corrupted_out[f"blocks.{i}.hook_mlp_out"] = layer.mlp.output.save()
 
         for component, activations in corrupted_out.items():
@@ -149,7 +149,10 @@ class EAP:
 
         del corrupted_out
         t.cuda.empty_cache()
+        
 
+        print(upstream_activations_difference)
+        return
         clean_out = {}
         gradients = {}
 
@@ -164,8 +167,11 @@ class EAP:
 
             for i, layer in enumerate(model.transformer.layers):
                 clean_out[f"blocks.{i}.attn.hook_result"] = layer.attn.attn_result.output.save()
+                
+                # gradients[f"blocks.{i}.hook_q_input"] = layer.attn.split_q.input.grad.save()
+                # gradients[f"blocks.{i}.hook_k_input"] = layer.attn.split_k.input.grad.save()
+                # gradients[f"blocks.{i}.hook_v_input"] = layer.attn.split_v.input.grad.save()
 
-                q, k, v = layer.attn.split_q.input.grad.save(), layer.attn.split_k.input.grad.save(), layer.attn.split_v.input.grad.save()
                 # gradients = layer.attn.split_q.output.grad.save()
                 if "hook_mlp_out" in self.upstream_hook_types:
                     clean_out[f"blocks.{i}.hook_mlp_out"] = layer.mlp.output.save()
@@ -174,10 +180,6 @@ class EAP:
 
                     gradients[f"blocks.{i}.hook_mlp_in"] = mlp_in
 
-                # gradients[f"blocks.{i}.hook_q_input"] = q
-                # gradients[f"blocks.{i}.hook_k_input"] = k
-                # gradients[f"blocks.{i}.hook_v_input"] = v
-            
             logits = model.output.logits
             value = metric(logits)
             value.backward()
