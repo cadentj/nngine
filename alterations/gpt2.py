@@ -98,12 +98,12 @@ v_alter = [
     for layer_idx in range(12)
 ] 
 
-def attn_input_hook(attention):
-    def attn_input(attn):
-        attn_in = attn.input[0][0]
+def block_input_hook(transformer_block):
+    def block_input(block):
+        block_in = block.input[0][0]
 
         return einops.repeat(
-            attn_in,
+            block_in,
             "batch pos d_model -> batch pos head_idx d_model",
             head_idx=12,
         ).clone()
@@ -112,8 +112,8 @@ def attn_input_hook(attention):
         base.input[0][0] = x.sum(dim=-2)
 
     hook = FnEnvoy(
-        attention,
-        attn_input,
+        transformer_block,
+        block_input,
         inverse=revert,
         replace=False
     )
@@ -122,40 +122,43 @@ def attn_input_hook(attention):
 
 split_q_input = [
     (
-        f".transformer.h.{layer_idx}.attn",
-        f".transformer.h.{layer_idx}.attn", 
+        f".transformer.h.{layer_idx}",
+        f".transformer.h.{layer_idx}", 
         "split_q_input",
-        lambda x: attn_input_hook(x),
+        lambda x: block_input_hook(x),
     )
     for layer_idx in range(12)
 ] 
 
 split_k_input = [
     (
-        f".transformer.h.{layer_idx}.attn",
-        f".transformer.h.{layer_idx}.attn", 
+        f".transformer.h.{layer_idx}",
+        f".transformer.h.{layer_idx}", 
         "split_k_input",
-        lambda x: attn_input_hook(x),
+        lambda x: block_input_hook(x),
     )
     for layer_idx in range(12)
 ] 
 
 split_v_input = [
     (
-        f".transformer.h.{layer_idx}.attn",
-        f".transformer.h.{layer_idx}.attn", 
+        f".transformer.h.{layer_idx}",
+        f".transformer.h.{layer_idx}", 
         "split_v_input",
-        lambda x: attn_input_hook(x),
+        lambda x: block_input_hook(x),
     )
     for layer_idx in range(12)
 ] 
 
-def split_qkv_hook(attention, slice_index):
+def split_qkv_hook(block, slice_index):
+    attention = block.attn
 
-    slice_map = {0: attention.split_q_input, 1: attention.split_k_input, 2: attention.split_v_input}
+    slice_map = {0: block.split_q_input, 1: block.split_k_input, 2: block.split_v_input}
     repeated_attn = slice_map[slice_index]
 
-    def split_head(attn_input):
+    def split_head(block_input):
+
+        attn_input = block.ln_1(block_input.output)
 
         weight = torch.tensor_split(attention.c_attn.weight, 3, dim=1)[slice_index]
         split_weight = einops.rearrange(
@@ -173,9 +176,10 @@ def split_qkv_hook(attention, slice_index):
         )[slice_index]
         
         split_out = einops.einsum(
-            attn_input.output, split_weight,
+            attn_input, split_weight,
             "batch pos head_idx d_model, head_idx d_model d_head -> batch pos head_idx d_head",
         ) + split_bias
+        
         return split_out
 
     def revert(base, x):
@@ -199,7 +203,7 @@ def split_qkv_hook(attention, slice_index):
 
 q_split_alterations = [
     (
-        f".transformer.h.{layer_idx}.attn",
+        f".transformer.h.{layer_idx}",
         f".transformer.h.{layer_idx}.attn",
         "split_q",
         lambda x: split_qkv_hook(x, 0),
@@ -209,7 +213,7 @@ q_split_alterations = [
 
 k_split_alterations = [
     (
-        f".transformer.h.{layer_idx}.attn",
+        f".transformer.h.{layer_idx}",
         f".transformer.h.{layer_idx}.attn",
         "split_k",
         lambda x: split_qkv_hook(x, 1),
@@ -219,7 +223,7 @@ k_split_alterations = [
 
 v_split_alterations = [
     (
-        f".transformer.h.{layer_idx}.attn",
+        f".transformer.h.{layer_idx}",
         f".transformer.h.{layer_idx}.attn",
         "split_v",
         lambda x: split_qkv_hook(x, 2),

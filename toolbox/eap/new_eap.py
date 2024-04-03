@@ -11,15 +11,13 @@ from typing import Dict, Callable, List, Union
 import numpy as np
 
 from nnsight import LanguageModel
-from transformer_lens import HookedTransformerConfig
-
 from nngine import alter
 
 class EAP:
 
     def __init__(
         self,
-        cfg: dict,
+        cfg,
         components: List[str] = ["head", "mlp"],
     ):
 
@@ -31,7 +29,7 @@ class EAP:
         self.n_heads = 12
         self.n_layers = 12
         self.d_model = 768
-        self.device = "cuda"
+        self.device = "cuda:0"
 
         # q, k, and v up-projections
         self.num_projections = 3
@@ -110,7 +108,8 @@ class EAP:
 
     def run(
         self,
-        model: LanguageModel,
+        model,
+        tokenizer,
         clean_tokens: Int[Tensor, "batch_size seq_len"],
         corrupted_tokens: Int[Tensor, "batch_size seq_len"],
         # TODO: Implement batch_size
@@ -134,10 +133,11 @@ class EAP:
         with t.no_grad():
             with model.trace(corrupted_tokens):
                 for i, layer in enumerate(model.transformer.layers):
-                    # corrupted_out[f"blocks.{i}.attn.hook_result"] = layer.attn.attn_result.output.save()
+                    corrupted_out[f"blocks.{i}.attn.hook_result"] = layer.attn.attn_result.output.save()
 
-                    if "blocks.0.hook_mlp_out" in self.upstream_hook_slices:
-                        corrupted_out[f"blocks.{i}.hook_mlp_out"] = layer.mlp.output.save()
+                    # TODO: Fix to just look for upstream slices.
+                    # if 'blocks.0.hook_mlp_out' in self.upstream_hook_slices:
+                    #     corrupted_out[f"blocks.{i}.hook_mlp_out"] = layer.hook_mlp_out.output.save()
 
         for component, activations in corrupted_out.items():
             if "mlp" in component:
@@ -149,41 +149,65 @@ class EAP:
 
         del corrupted_out
         t.cuda.empty_cache()
-        
 
-        print(upstream_activations_difference)
-        return
-        clean_out = {}
-        gradients = {}
-
-        model = LanguageModel(
+        nn_model = LanguageModel(
             'openai-community/gpt2',
             device_map="cuda:0",
             dispatch=True,
+            tokenizer= tokenizer
         )
-        alter(model)
+
+        alter(nn_model)
+
+
+        clean_out = {}
+        gradients = {}
+
+        # sample = tokenizer.encode("Susan and Mary went to the store, Susan went in and")
 
         with model.trace(clean_tokens):
-
-            for i, layer in enumerate(model.transformer.layers):
-                clean_out[f"blocks.{i}.attn.hook_result"] = layer.attn.attn_result.output.save()
-                
-                # gradients[f"blocks.{i}.hook_q_input"] = layer.attn.split_q.input.grad.save()
-                # gradients[f"blocks.{i}.hook_k_input"] = layer.attn.split_k.input.grad.save()
-                # gradients[f"blocks.{i}.hook_v_input"] = layer.attn.split_v.input.grad.save()
-
-                # gradients = layer.attn.split_q.output.grad.save()
-                if "hook_mlp_out" in self.upstream_hook_types:
-                    clean_out[f"blocks.{i}.hook_mlp_out"] = layer.mlp.output.save()
-
-                    mlp_in = layer.mlp.input[0][0].grad.save()
-
-                    gradients[f"blocks.{i}.hook_mlp_in"] = mlp_in
+            test = model.transformer.layers[0].attn.split_q.input.grad.save()
 
             logits = model.output.logits
             value = metric(logits)
             value.backward()
 
+            # logits = model.output.logits[:,-1,:]
+            # value = logits.sum()
+            # value.backward()
+
+        print(test)
+
+        with model.trace(clean_tokens):
+
+            # test = model.transformer.layers[-2].attn.output[0].grad.save()
+
+            for i, layer in enumerate(model.transformer.layers):
+
+                gradients[f"blocks.{i}.hook_q_input"] = layer.attn.split_q.input.grad.save()
+                gradients[f"blocks.{i}.hook_k_input"] = layer.attn.split_k.input.grad.save()
+                gradients[f"blocks.{i}.hook_v_input"] = layer.attn.split_v.input.grad.save()
+
+                clean_out[f"blocks.{i}.attn.hook_result"] = layer.attn.attn_result.output.save()
+
+
+
+                # q, k, v = layer.hook_q_input.input[0][0].grad.save(), layer.hook_k_input.input[0][0].grad.save(), layer.hook_v_input.input[0][0].grad.save()
+
+                # if "hook_mlp_out" in self.upstream_hook_types:
+                #     clean_out[f"blocks.{i}.hook_mlp_out"] = layer.hook_mlp_out.output.save()
+
+                #     mlp_in = layer.hook_mlp_in.output.grad.save()
+
+                #     gradients[f"blocks.{i}.hook_mlp_in"] = mlp_in
+
+            logits = model.output.logits
+            value = metric(logits)
+            value.backward()
+
+        print(gradients[f"blocks.{0}.hook_q_input"])
+        print(gradients[f"blocks.{0}.hook_q_input"].shape)
+        
         for component, activations in clean_out.items():
             if "mlp" in component:
                 activations = activations.value.unsqueeze(-2)

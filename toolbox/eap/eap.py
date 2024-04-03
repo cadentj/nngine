@@ -125,7 +125,7 @@ class EAP:
         with t.no_grad():
             with model.trace(corrupted_tokens):
                 for i, layer in enumerate(model.blocks):
-                    # corrupted_out[f"blocks.{i}.attn.hook_result"] = layer.attn.hook_result.output.save()
+                    corrupted_out[f"blocks.{i}.attn.hook_result"] = layer.attn.hook_result.output.save()
 
                     # TODO: Fix to just look for upstream slices.
                     if 'blocks.0.hook_mlp_out' in self.upstream_hook_slices:
@@ -141,12 +141,26 @@ class EAP:
 
         del corrupted_out
         t.cuda.empty_cache()
-        print(upstream_activations_difference)
-        return
+
+        with model.trace(clean_tokens):
+            test = model.blocks[0].hook_q_input.input[0][0].grad.save()
+
+            logits = model.unembed.output
+            value = metric(logits)
+            value.backward()
+
+            # logits = model.output.logits[:,-1,:]
+            # value = logits.sum()
+            # value.backward()
+
+        print(test)
 
         clean_out = {}
         gradients = {}
         with model.trace(clean_tokens):
+
+            # test = model.blocks[-2].output.grad.save()
+
             for i, layer in enumerate(model.blocks):
                 clean_out[f"blocks.{i}.attn.hook_result"] = layer.attn.hook_result.output.save()
                 q, k, v = layer.hook_q_input.input[0][0].grad.save(), layer.hook_k_input.input[0][0].grad.save(), layer.hook_v_input.input[0][0].grad.save()
@@ -158,13 +172,16 @@ class EAP:
 
                     gradients[f"blocks.{i}.hook_mlp_in"] = mlp_in
 
-                # gradients[f"blocks.{i}.hook_q_input"] = q
-                # gradients[f"blocks.{i}.hook_k_input"] = k
-                # gradients[f"blocks.{i}.hook_v_input"] = v
+                gradients[f"blocks.{i}.hook_q_input"] = q
+                gradients[f"blocks.{i}.hook_k_input"] = k
+                gradients[f"blocks.{i}.hook_v_input"] = v
             
             logits = model.unembed.output
             value = metric(logits)
             value.backward()
+
+        print(gradients[f"blocks.{0}.hook_q_input"])
+        print(gradients[f"blocks.{0}.hook_q_input"].shape)
 
         for component, activations in clean_out.items():
             if "mlp" in component:
