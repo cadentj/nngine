@@ -127,9 +127,9 @@ class EAP:
                 for i, layer in enumerate(model.blocks):
                     corrupted_out[f"blocks.{i}.attn.hook_result"] = layer.attn.hook_result.output.save()
 
-                    # TODO: Fix to just look for upstream slices.
-                    if 'blocks.0.hook_mlp_out' in self.upstream_hook_slices:
-                        corrupted_out[f"blocks.{i}.hook_mlp_out"] = layer.hook_mlp_out.output.save()
+                    # # TODO: Fix to just look for upstream slices.
+                    # if 'blocks.0.hook_mlp_out' in self.upstream_hook_slices:
+                    #     corrupted_out[f"blocks.{i}.hook_mlp_out"] = layer.hook_mlp_out.output.save()
 
         for component, activations in corrupted_out.items():
             if "mlp" in component:
@@ -142,18 +142,6 @@ class EAP:
         del corrupted_out
         t.cuda.empty_cache()
 
-        with model.trace(clean_tokens):
-            test = model.blocks[0].hook_q_input.input[0][0].grad.save()
-
-            logits = model.unembed.output
-            value = metric(logits)
-            value.backward()
-
-            # logits = model.output.logits[:,-1,:]
-            # value = logits.sum()
-            # value.backward()
-
-        print(test)
 
         clean_out = {}
         gradients = {}
@@ -162,15 +150,15 @@ class EAP:
             # test = model.blocks[-2].output.grad.save()
 
             for i, layer in enumerate(model.blocks):
-                clean_out[f"blocks.{i}.attn.hook_result"] = layer.attn.hook_result.output.save()
+                # clean_out[f"blocks.{i}.attn.hook_result"] = layer.attn.hook_result.output.save()
                 q, k, v = layer.hook_q_input.input[0][0].grad.save(), layer.hook_k_input.input[0][0].grad.save(), layer.hook_v_input.input[0][0].grad.save()
 
-                if "hook_mlp_out" in self.upstream_hook_types:
-                    clean_out[f"blocks.{i}.hook_mlp_out"] = layer.hook_mlp_out.output.save()
+                # if "hook_mlp_out" in self.upstream_hook_types:
+                #     clean_out[f"blocks.{i}.hook_mlp_out"] = layer.hook_mlp_out.output.save()
 
-                    mlp_in = layer.hook_mlp_in.output.grad.save()
+                #     mlp_in = layer.hook_mlp_in.output.grad.save()
 
-                    gradients[f"blocks.{i}.hook_mlp_in"] = mlp_in
+                #     gradients[f"blocks.{i}.hook_mlp_in"] = mlp_in
 
                 gradients[f"blocks.{i}.hook_q_input"] = q
                 gradients[f"blocks.{i}.hook_k_input"] = k
@@ -181,7 +169,7 @@ class EAP:
             value.backward()
 
         print(gradients[f"blocks.{0}.hook_q_input"])
-        print(gradients[f"blocks.{0}.hook_q_input"].shape)
+        # print(gradients[f"blocks.{0}.hook_q_input"].shape)
 
         for component, activations in clean_out.items():
             if "mlp" in component:

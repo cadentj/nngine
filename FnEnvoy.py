@@ -55,7 +55,8 @@ class FnEnvoy(Envoy):
 
     @output.setter
     def output(self, value: Union[InterventionProxy, Any]) -> None:
+        print("setting")
         if self._replace:
             self._inverse(self._base, value)
 
-        self._output = None
+        self._output = value

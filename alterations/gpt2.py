@@ -100,16 +100,16 @@ v_alter = [
 
 def block_input_hook(transformer_block):
     def block_input(block):
-        block_in = block.input[0][0]
+        block_in = block.input[0][0].clone()
 
         return einops.repeat(
             block_in,
             "batch pos d_model -> batch pos head_idx d_model",
             head_idx=12,
-        ).clone()
+        )
 
     def revert(base, x):
-        base.input[0][0] = x.sum(dim=-2)
+        print("shouldn't be called")
 
     hook = FnEnvoy(
         transformer_block,
@@ -157,6 +157,7 @@ def split_qkv_hook(block, slice_index):
     repeated_attn = slice_map[slice_index]
 
     def split_head(block_input):
+        nonlocal block
 
         attn_input = block.ln_1(block_input.output)
 
@@ -183,13 +184,16 @@ def split_qkv_hook(block, slice_index):
         return split_out
 
     def revert(base, x):
-        split_attn = list(attention.qkv.output)
+
+        split_attn =  list(block.attn.c_attn.output.split(768, dim=2))
+
+        # split_attn = list(attention.qkv.output)
 
         split_attn[slice_index] = einops.rearrange(
             x, 
             "batch pos head_idx d_head -> batch pos (head_idx d_head)",
         )
-        attention.qkv.output = split_attn
+        block.attn.c_attn.output = torch.cat(split_attn, dim=2)
 
     # TODO: Remove replace keyword? 
     # Maybe add some input function? 
@@ -282,12 +286,13 @@ def attn_result_hook(attention):
         return attn_out
 
     def revert(base, x):
-        base.output = torch.sum(x, dim=2)
+        base = torch.sum(x, dim=2)
 
     hook = FnEnvoy(
         attention.c_proj,
         attn_result,
-        inverse=revert
+        inverse=revert,
+        replace=False
     )
 
     return hook

@@ -5,6 +5,7 @@ Link to repo: https://github.com/canrager/clas/blob/main/tl_utils.py
 
 import torch as t
 
+import einops
 from torch import Tensor 
 from jaxtyping import Float, Int
 from typing import Dict, Callable, List, Union
@@ -137,7 +138,7 @@ class EAP:
 
                     # TODO: Fix to just look for upstream slices.
                     # if 'blocks.0.hook_mlp_out' in self.upstream_hook_slices:
-                    #     corrupted_out[f"blocks.{i}.hook_mlp_out"] = layer.hook_mlp_out.output.save()
+                    #     corrupted_out[f"blocks.{i}.hook_mlp_out"] = layer.mlp.output.save()
 
         for component, activations in corrupted_out.items():
             if "mlp" in component:
@@ -150,33 +151,20 @@ class EAP:
         del corrupted_out
         t.cuda.empty_cache()
 
-        nn_model = LanguageModel(
+        model = LanguageModel(
             'openai-community/gpt2',
             device_map="cuda:0",
             dispatch=True,
             tokenizer= tokenizer
         )
 
-        alter(nn_model)
+        alter(model)
 
 
         clean_out = {}
         gradients = {}
 
-        # sample = tokenizer.encode("Susan and Mary went to the store, Susan went in and")
 
-        with model.trace(clean_tokens):
-            test = model.transformer.layers[0].attn.split_q.input.grad.save()
-
-            logits = model.output.logits
-            value = metric(logits)
-            value.backward()
-
-            # logits = model.output.logits[:,-1,:]
-            # value = logits.sum()
-            # value.backward()
-
-        print(test)
 
         with model.trace(clean_tokens):
 
@@ -190,23 +178,44 @@ class EAP:
 
                 clean_out[f"blocks.{i}.attn.hook_result"] = layer.attn.attn_result.output.save()
 
+                # heads = einops.rearrange(
+                #     layer.attn.c_proj.input[0][0], 
+                #     "batch seq (head_idx head_dim) -> batch seq head_idx head_dim", 
+                #     head_idx=12, 
+                #     head_dim=64
+                # )
 
+                # w_o_split = einops.rearrange(
+                #     layer.attn.c_proj.weight,
+                #     "(head_idx head_dim) d_model \
+                #         -> head_idx head_dim d_model",
+                #     head_idx=12,
+                #     head_dim=64
+                # )
 
+                # attn_out = einops.einsum(
+                #     heads, w_o_split,
+                #     "batch pos head_idx head_dim, head_idx head_dim d_model -> batch pos head_idx d_model",
+                # )
+
+                # clean_out[f"blocks.{i}.attn.hook_result"] = attn_out.save()
+                # # return attn_out
+                
                 # q, k, v = layer.hook_q_input.input[0][0].grad.save(), layer.hook_k_input.input[0][0].grad.save(), layer.hook_v_input.input[0][0].grad.save()
 
                 # if "hook_mlp_out" in self.upstream_hook_types:
-                #     clean_out[f"blocks.{i}.hook_mlp_out"] = layer.hook_mlp_out.output.save()
-
-                #     mlp_in = layer.hook_mlp_in.output.grad.save()
+                #     mlp_in = layer.attn.output[0].grad.save()
 
                 #     gradients[f"blocks.{i}.hook_mlp_in"] = mlp_in
+
+                #     clean_out[f"blocks.{i}.hook_mlp_out"] = layer.mlp.output.save()
 
             logits = model.output.logits
             value = metric(logits)
             value.backward()
 
         print(gradients[f"blocks.{0}.hook_q_input"])
-        print(gradients[f"blocks.{0}.hook_q_input"].shape)
+        # print(gradients[f"blocks.{0}.hook_q_input"].shape)
         
         for component, activations in clean_out.items():
             if "mlp" in component:
