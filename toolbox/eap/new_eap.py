@@ -165,10 +165,7 @@ class EAP:
         gradients = {}
 
 
-
         with model.trace(clean_tokens):
-
-            # test = model.transformer.layers[-2].attn.output[0].grad.save()
 
             for i, layer in enumerate(model.transformer.layers):
 
@@ -177,31 +174,6 @@ class EAP:
                 gradients[f"blocks.{i}.hook_v_input"] = layer.attn.split_v.input.grad.save()
 
                 clean_out[f"blocks.{i}.attn.hook_result"] = layer.attn.attn_result.output.save()
-
-                # heads = einops.rearrange(
-                #     layer.attn.c_proj.input[0][0], 
-                #     "batch seq (head_idx head_dim) -> batch seq head_idx head_dim", 
-                #     head_idx=12, 
-                #     head_dim=64
-                # )
-
-                # w_o_split = einops.rearrange(
-                #     layer.attn.c_proj.weight,
-                #     "(head_idx head_dim) d_model \
-                #         -> head_idx head_dim d_model",
-                #     head_idx=12,
-                #     head_dim=64
-                # )
-
-                # attn_out = einops.einsum(
-                #     heads, w_o_split,
-                #     "batch pos head_idx head_dim, head_idx head_dim d_model -> batch pos head_idx d_model",
-                # )
-
-                # clean_out[f"blocks.{i}.attn.hook_result"] = attn_out.save()
-                # # return attn_out
-                
-                # q, k, v = layer.hook_q_input.input[0][0].grad.save(), layer.hook_k_input.input[0][0].grad.save(), layer.hook_v_input.input[0][0].grad.save()
 
                 # if "hook_mlp_out" in self.upstream_hook_types:
                 #     mlp_in = layer.attn.output[0].grad.save()
@@ -213,9 +185,6 @@ class EAP:
             logits = model.output.logits
             value = metric(logits)
             value.backward()
-
-        print(gradients[f"blocks.{0}.hook_q_input"])
-        # print(gradients[f"blocks.{0}.hook_q_input"].shape)
         
         for component, activations in clean_out.items():
             if "mlp" in component:

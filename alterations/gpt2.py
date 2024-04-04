@@ -286,7 +286,7 @@ def attn_result_hook(attention):
         return attn_out
 
     def revert(base, x):
-        base = torch.sum(x, dim=2)
+        base = torch.sum(x, dim=2) + base.bias
 
     hook = FnEnvoy(
         attention.c_proj,
