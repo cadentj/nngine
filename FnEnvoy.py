@@ -2,7 +2,7 @@ from typing import Callable, Union, Any
 
 from nnsight.intervention import InterventionProxy
 
-from .envoy import Envoy
+from .Envoy import Envoy
 
 class FnEnvoy(Envoy):
     

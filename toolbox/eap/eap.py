@@ -18,19 +18,17 @@ class EAP:
 
     def __init__(
         self,
-        cfg,
+        config,
         components: List[str] = ["head", "mlp"],
+        device = "cpu",
+        dtype=t.float32
     ):
 
-        # self.n_heads = cfg.n_heads
-        # self.n_layers = cfg.n_layers
-        # self.d_model = cfg.d_model
-        # self.device = cfg.device
-
-        self.n_heads = 12
-        self.n_layers = 12
-        self.d_model = 768
-        self.device = "cuda:0"
+        self.n_heads = config.n_heads
+        self.n_layers = config.n_layers
+        self.d_model = config.d_model
+        self.device = device
+        self.dtype = dtype
 
         # q, k, and v up-projections
         self.num_projections = 3
@@ -110,7 +108,6 @@ class EAP:
     def run(
         self,
         model,
-        tokenizer,
         clean_tokens: Int[Tensor, "batch_size seq_len"],
         corrupted_tokens: Int[Tensor, "batch_size seq_len"],
         # TODO: Implement batch_size
@@ -125,8 +122,7 @@ class EAP:
         upstream_activations_difference = t.zeros(
             (batch_size, seq_len, self.n_upstream_nodes, self.d_model),
             device=self.device,
-            # dtype=model.cfg.dtype,
-            dtype=t.float32,
+            dtype=self.dtype,
             requires_grad=False
         )
         
@@ -150,15 +146,6 @@ class EAP:
 
         del corrupted_out
         t.cuda.empty_cache()
-
-        model = LanguageModel(
-            'openai-community/gpt2',
-            device_map="cuda:0",
-            dispatch=True,
-            tokenizer= tokenizer
-        )
-
-        alter(model)
 
 
         clean_out = {}

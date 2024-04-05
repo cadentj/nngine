@@ -13,6 +13,12 @@ name_alterations = {
     "lm_head" : "unembed"
 }
 
+dimensions = {
+    "n_heads" : 12,
+    "n_layers" : 12,
+    "d_model" : 768,
+}
+
 hidden = []
 
 blocks = [
@@ -43,4 +49,4 @@ alterations = [
 alterations = [FnEdit(*alteration) for alteration in alterations]
 
 def gpt2():
-    return name_alterations, alterations, hidden
+    return name_alterations, alterations, hidden, dimensions

@@ -2,7 +2,7 @@ from typing import Callable
 
 from .Editor import Edit
 from ..util import fetch_sub_envoy
-from ..envoy import Envoy
+from ..Envoy import Envoy
 
 class FnEdit(Edit):
 
