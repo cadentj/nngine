@@ -9,11 +9,21 @@ class FnEdit(Edit):
     def __init__(
         self, 
         name: str,
-        base: str,
-        target: str,
+        base: str | list[str],
+        target: str | list[str],
         fn_hook: Callable,
     ) -> None:
         super().__init__()
+
+        if isinstance(base, str):
+            if not isinstance(target, str):
+                raise ValueError("base is a single module but target is not")
+            if len(base) != len(target):
+                raise ValueError("base and target are different lengths")
+            
+            else:
+                self._base = [base]
+                self._target = [target]
 
         self._name = name
         self._base = base
@@ -22,16 +32,17 @@ class FnEdit(Edit):
         
     def edit(self, obj: Envoy):
 
-        base = fetch_sub_envoy(obj, self._base)
-        target = fetch_sub_envoy(base, self._target)
+        for base, target in zip(self._base, self._target):
+            base = fetch_sub_envoy(obj, base)
+            target = fetch_sub_envoy(base, target)
 
-        edit = self._fn_hook(base)
+            edit = self._fn_hook(base)
 
-        setattr(
-            target,
-            self._name,
-            edit
-        )
+            setattr(
+                target,
+                self._name,
+                edit
+            )
 
     def restore(self, obj: Envoy):
         

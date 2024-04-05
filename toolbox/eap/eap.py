@@ -5,26 +5,33 @@ Link to repo: https://github.com/canrager/clas/blob/main/tl_utils.py
 
 import torch as t
 
+import einops
 from torch import Tensor 
 from jaxtyping import Float, Int
 from typing import Dict, Callable, List, Union
 import numpy as np
 
-from nnsight.models.UnifiedTransformer import UnifiedTransformer
-from transformer_lens import HookedTransformerConfig
+from nnsight import LanguageModel
+from nngine import alter
 
 class EAP:
 
     def __init__(
         self,
-        cfg: HookedTransformerConfig,
+        cfg,
         components: List[str] = ["head", "mlp"],
     ):
 
-        self.n_heads = cfg.n_heads
-        self.n_layers = cfg.n_layers
-        self.d_model = cfg.d_model
-        self.device = cfg.device
+        # self.n_heads = cfg.n_heads
+        # self.n_layers = cfg.n_layers
+        # self.d_model = cfg.d_model
+        # self.device = cfg.device
+
+        self.n_heads = 12
+        self.n_layers = 12
+        self.d_model = 768
+        self.device = "cuda:0"
+
         # q, k, and v up-projections
         self.num_projections = 3
 
@@ -102,7 +109,8 @@ class EAP:
 
     def run(
         self,
-        model: UnifiedTransformer,
+        model,
+        tokenizer,
         clean_tokens: Int[Tensor, "batch_size seq_len"],
         corrupted_tokens: Int[Tensor, "batch_size seq_len"],
         # TODO: Implement batch_size
@@ -117,19 +125,20 @@ class EAP:
         upstream_activations_difference = t.zeros(
             (batch_size, seq_len, self.n_upstream_nodes, self.d_model),
             device=self.device,
-            dtype=model.cfg.dtype,
+            # dtype=model.cfg.dtype,
+            dtype=t.float32,
             requires_grad=False
         )
         
         corrupted_out = {}
         with t.no_grad():
             with model.trace(corrupted_tokens):
-                for i, layer in enumerate(model.blocks):
-                    corrupted_out[f"blocks.{i}.attn.hook_result"] = layer.attn.hook_result.output.save()
+                for i, layer in enumerate(model.transformer.layers):
+                    corrupted_out[f"blocks.{i}.attn.hook_result"] = layer.attn.attn_result.output.save()
 
                     # # TODO: Fix to just look for upstream slices.
-                    # if 'blocks.0.hook_mlp_out' in self.upstream_hook_slices:
-                    #     corrupted_out[f"blocks.{i}.hook_mlp_out"] = layer.hook_mlp_out.output.save()
+                    if "hook_mlp_out" in self.upstream_hook_types:
+                        corrupted_out[f"blocks.{i}.hook_mlp_out"] = layer.mlp.output.save()
 
         for component, activations in corrupted_out.items():
             if "mlp" in component:
@@ -142,35 +151,44 @@ class EAP:
         del corrupted_out
         t.cuda.empty_cache()
 
+        model = LanguageModel(
+            'openai-community/gpt2',
+            device_map="cuda:0",
+            dispatch=True,
+            tokenizer= tokenizer
+        )
+
+        alter(model)
+
 
         clean_out = {}
         gradients = {}
+
+
         with model.trace(clean_tokens):
 
-            # test = model.blocks[-2].output.grad.save()
+            for i, layer in enumerate(model.transformer.layers):
 
-            for i, layer in enumerate(model.blocks):
-                # clean_out[f"blocks.{i}.attn.hook_result"] = layer.attn.hook_result.output.save()
-                q, k, v = layer.hook_q_input.input[0][0].grad.save(), layer.hook_k_input.input[0][0].grad.save(), layer.hook_v_input.input[0][0].grad.save()
+                gradients[f"blocks.{i}.hook_q_input"] = layer.attn.split_q.input.grad.save()
+                gradients[f"blocks.{i}.hook_k_input"] = layer.attn.split_k.input.grad.save()
+                gradients[f"blocks.{i}.hook_v_input"] = layer.attn.split_v.input.grad.save()
 
-                # if "hook_mlp_out" in self.upstream_hook_types:
-                #     clean_out[f"blocks.{i}.hook_mlp_out"] = layer.hook_mlp_out.output.save()
+                clean_out[f"blocks.{i}.attn.hook_result"] = layer.attn.attn_result.output.save()
 
-                #     mlp_in = layer.hook_mlp_in.output.grad.save()
+                if "hook_mlp_out" in self.upstream_hook_types:
+                    # This corresponds to MLP input
+                    # mlp_in = layer.ln_2.input[0][0].grad.save()
 
-                #     gradients[f"blocks.{i}.hook_mlp_in"] = mlp_in
+                    # gradients[f"blocks.{i}.hook_mlp_in"] = mlp_in
+                    clean_out[f"blocks.{i}.hook_mlp_out"] = layer.mlp.output.save()
 
-                gradients[f"blocks.{i}.hook_q_input"] = q
-                gradients[f"blocks.{i}.hook_k_input"] = k
-                gradients[f"blocks.{i}.hook_v_input"] = v
-            
-            logits = model.unembed.output
+            logits = model.output.logits
             value = metric(logits)
             value.backward()
 
-        print(gradients[f"blocks.{0}.hook_q_input"])
-        # print(gradients[f"blocks.{0}.hook_q_input"].shape)
-
+        # print(gradients[f"blocks.{0}.hook_mlp_in"])
+        print(clean_out[f"blocks.{0}.hook_mlp_out"])
+        
         for component, activations in clean_out.items():
             if "mlp" in component:
                 activations = activations.value.unsqueeze(-2)
