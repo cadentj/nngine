@@ -167,3 +167,24 @@ def attn_result_hook(attention):
     )
 
     return hook
+
+def mlp_in_hook(block):
+    
+    def mlp_in(b):
+        resid_pre = b.input[0][0]
+        attn_out = b.attn.output[0]        
+
+        resid_mid = resid_pre + attn_out
+
+        return resid_mid
+
+    def revert(base, x):
+        base.mlp.input[0][0][:] = block.ln_2(x)
+
+    hook = FnEnvoy(
+        block,
+        mlp_in,
+        inverse=revert,
+    )
+
+    return hook

@@ -31,6 +31,11 @@ attention = [
     for layer_idx in range(12)
 ]
 
+mlps = [
+    f".transformer.h.{layer_idx}.mlp"
+    for layer_idx in range(12)
+]
+
 alterations = [
     ("qkv", attention, attention, qkv_hook),
     ("q", attention, attention, lambda x: indv_qkv_hook(x, 0)),
@@ -44,6 +49,7 @@ alterations = [
     ("split_v", blocks, attention, lambda x: split_qkv_hook(x, 2)),
     ("heads", attention, attention, head_hook),
     ("attn_result", attention, attention, attn_result_hook),
+    ("mlp_in", blocks, mlps, mlp_in_hook)
 ]
 
 alterations = [FnEdit(*alteration) for alteration in alterations]

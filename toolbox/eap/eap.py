@@ -164,17 +164,14 @@ class EAP:
 
                 if "hook_mlp_out" in self.upstream_hook_types:
                     # This corresponds to MLP input
-                    # mlp_in = layer.ln_2.input[0][0].grad.save()
+                    mlp_in = layer.mlp.mlp_in.output.grad.save()
 
-                    # gradients[f"blocks.{i}.hook_mlp_in"] = mlp_in
+                    gradients[f"blocks.{i}.hook_mlp_in"] = mlp_in
                     clean_out[f"blocks.{i}.hook_mlp_out"] = layer.mlp.output.save()
 
             logits = model.output.logits
             value = metric(logits)
             value.backward()
-
-        # print(gradients[f"blocks.{0}.hook_mlp_in"])
-        print(clean_out[f"blocks.{0}.hook_mlp_out"])
         
         for component, activations in clean_out.items():
             if "mlp" in component:
