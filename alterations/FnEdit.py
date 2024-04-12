@@ -34,6 +34,7 @@ class FnEdit(Edit):
 
         for base, target in zip(self._base, self._target):
             base = fetch_sub_envoy(obj, base)
+            # NOTE: Might need to change if target is not a subenvoy of base
             target = fetch_sub_envoy(base, target)
 
             edit = self._fn_hook(base)
@@ -45,9 +46,11 @@ class FnEdit(Edit):
             )
 
     def restore(self, obj: Envoy):
-        
-        delattr(
-            fetch_sub_envoy(obj, self._base),
-            self._name
-        )
-        
+
+        for _, target in zip(self._base, self._target):
+            target = fetch_sub_envoy(obj, target)
+
+            delattr(
+                target,
+                self._name
+            )
