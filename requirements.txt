@@ -1,0 +1,5 @@
+nnsight
+fastapi
+uvicorn
+celery
+ray[serve]

@@ -1,15 +1,15 @@
-# %%
+from functools import partial
 
-import json
 import torch
+from nnsight import NNsight
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
+
 from torch._subclasses.fake_tensor import FakeTensorMode
 from torch.fx.experimental.symbolic_shapes import ShapeEnv
 from torch.utils._pytree import tree_map_only
-from nnsight import NNsight
-from functools import partial
 
 COLLECTION = (list, tuple, set, dict, frozenset)
+
 
 def get_shapes(repo_id):
 
@@ -82,9 +82,10 @@ def get_shapes(repo_id):
 
         return model, shapes
 
+
 def get_type(module):
-    print(module)
     return "ModuleList" if isinstance(module._module, torch.nn.ModuleList) else "Module"
+
 
 def generate_pytree(module, shapes, atomic='', path='', fold=False):
     module_type = get_type(module)
@@ -119,9 +120,9 @@ def generate_pytree(module, shapes, atomic='', path='', fold=False):
         pytree.pop("submodules")
 
     return pytree
-        
 
-def load_pytree(repo_id: str):
+
+def load(repo_id: str):
 
     model, shapes = get_shapes(repo_id)
 

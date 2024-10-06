@@ -10,7 +10,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from typing import Dict, Any, List
 from compile import compile, Graph
 
-from generate_pytree import load_pytree 
+from nngine.services.model.generate_pytree import load_pytree 
 
 from pydantic import BaseModel
 
