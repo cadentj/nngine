@@ -2,7 +2,6 @@ from typing import List, Union, Dict
 
 from pydantic import BaseModel, model_validator
 
-from .edges import Edge
 from .nodes import (
     Node,
     SessionNode,
@@ -17,6 +16,9 @@ from .nodes import (
     ChatNode
 )
 
+class Edge(BaseModel):
+    source: str
+    target: str
 
 class Graph(BaseModel):
     nodes: List[
@@ -45,3 +47,7 @@ class Graph(BaseModel):
     def add_lookup(self):
         self.lookup = {node.id: node for node in self.nodes}
         return self
+    
+    def get_nodes(self, type: List[str]):
+        """Return nodes of a specific type."""
+        return [node for node in self.nodes if node.type in types]

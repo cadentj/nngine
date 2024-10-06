@@ -1,5 +1,4 @@
 nnsight
 fastapi
 uvicorn
-celery
-ray[serve]
+# ray[serve]

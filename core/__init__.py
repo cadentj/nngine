@@ -1,1 +1,1 @@
-from .compile.schema import Graph
+from .compile import Graph, compile

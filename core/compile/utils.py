@@ -1,5 +1,5 @@
 from collections import defaultdict
-from .schema import Graph
+from .graph import Graph
 
 def build_edge_lookup(graph: Graph):
     edge_lookup = defaultdict(list)

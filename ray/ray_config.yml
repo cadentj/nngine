@@ -1,0 +1,15 @@
+proxy_location: Disabled
+
+http_options:
+  host: 0.0.0.0
+  port: 8000
+
+applications:
+- name: ndif
+  route_prefix: /
+  import_path: src.head:head
+  runtime_env:
+    pip:
+      - torch
+      - transformers
+      - nnsight

@@ -1,7 +1,7 @@
 from typing import List, Dict
 
 from .utils import build_edge_lookup, get_top_parent
-from .schema import Node, Edge, Graph
+from .graph import Node, Edge, Graph
 
 def resolve_dependencies(graph: Graph):
     """Ensure contexts are processed correctly."""

@@ -1,7 +1,7 @@
 from collections import defaultdict, deque
 from typing import List
 
-from .schema import Graph
+from .graph import Graph
 from .precompile import precompile, prepare
 from .utils import get_adj_list
 
@@ -50,8 +50,6 @@ def topological_sort(graph: Graph) -> List[str]:
 
 def compile(graph: Graph) -> tuple:
     """Compile a graph into executable NNsight code."""
-    
-    # NOTE: Should move this out of here.
     
     prepare(graph)
     sorted_ids, grouped = topological_sort(graph)
