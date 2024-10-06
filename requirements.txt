@@ -1,4 +1,4 @@
 nnsight
 fastapi
 uvicorn
-# ray[serve]
+ray[serve]

@@ -1,6 +1,5 @@
 from ray import serve
 from .model import ModelDeployment
-from typing import List
 
 from .core.schema import NNsightRequestModel
 

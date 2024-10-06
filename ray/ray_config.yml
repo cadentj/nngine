@@ -5,7 +5,7 @@ http_options:
   port: 8000
 
 applications:
-- name: ndif
+- name: nngine
   route_prefix: /
   import_path: src.head:head
   runtime_env:
