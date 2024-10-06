@@ -122,14 +122,23 @@ def generate_pytree(module, shapes, atomic='', path='', fold=False):
     return pytree
 
 
+# def load(repo_id: str):
+
+#     model, shapes = get_shapes(repo_id)
+
+#     model = NNsight(model)
+
+#     graph = generate_pytree(model, shapes, atomic='model', path='model')
+
+#     return graph
+
+
 def load(repo_id: str):
 
-    model, shapes = get_shapes(repo_id)
+    import json
 
-    model = NNsight(model)
+    repo_id = repo_id.replace("/", "_")
 
-    graph = generate_pytree(model, shapes, atomic='model', path='model')
-
-    return graph
-
+    with open(f"/Users/caden/Programming/nngine/core/model/{repo_id}.json", "r") as f:
+        return json.load(f)
 

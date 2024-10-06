@@ -4,9 +4,9 @@ import json
 import sys
 
 sys.path.append("..")
-from services.src.model import load
+from core.model import load
 
-repo_id = "EleutherAI/gpt-j-6b"
+repo_id = "Qwen/Qwen2.5-0.5B-Instruct"
 
 pytree = load(repo_id)
 

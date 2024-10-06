@@ -14,6 +14,9 @@ class RayHead:
 
     async def __call__(self, request: NNsightRequestModel):
         return await self.deployments["Llama-3.1-8B"].remote(request)
+    
+    def add_deployment(self, name: str, model: str):
+        self.deployments[name] = ModelDeployment.options(name=name).bind(model)
 
 deployments = {
     name : ModelDeployment.options(name=name).bind(model)
