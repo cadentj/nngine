@@ -1,4 +1,0 @@
-nnsight
-fastapi
-uvicorn
-ray[serve]
